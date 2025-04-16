@@ -40,16 +40,16 @@ Built for developers, crypto enthusiasts, and learners who want to explore core 
 ![HomePage Screenshot](https://github.com/anujs101/batua/blob/main/public/Screenshot1.png)
 
 ### 🔹 Airdrop Page
-![Airdrop Screenshot](./public/screenshot2.png)
+![Airdrop Screenshot](https://github.com/anujs101/batua/blob/main/public/Screenshot2.png)
 
 ### 🔹 SendToken Page
-![Airdrop Screenshot](./public/screenshot3.png)
+![Airdrop Screenshot](https://github.com/anujs101/batua/blob/main/public/Screenshot3.png)
 
 ### 🔹 Sign/Verify Message Page
-![Airdrop Screenshot](./public/screenshot5.png)
+![Airdrop Screenshot](https://github.com/anujs101/batua/blob/main/public/Screenshot5.png)
 
 ### 🔹 Token Launchpad
-![Launchpad Screenshot](./public/screenshot4.gif)
+![Launchpad Screenshot](https://github.com/anujs101/batua/blob/main/public/Screenshot4.png)
 
 ---
 
