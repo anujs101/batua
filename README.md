@@ -37,7 +37,7 @@ Built for developers, crypto enthusiasts, and learners who want to explore core 
 ## 📸 Screenshots
 
 ### 🔹 Home Page
-![HomePage Screenshot](./public/screenshot1.png)
+![HomePage Screenshot](/public/screenshot1.png)
 
 ### 🔹 Airdrop Page
 ![Airdrop Screenshot](./public/screenshot2.png)
