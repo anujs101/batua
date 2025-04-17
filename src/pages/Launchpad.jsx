@@ -5,10 +5,10 @@ import { motion, useAnimation } from "framer-motion"
 import { useWallet } from "@solana/wallet-adapter-react"
 import toast from "react-hot-toast"
 import { Rocket, Info, ImageIcon, HelpCircle, Check, Loader2, AlertCircle } from "lucide-react"
-import { Button } from "../components/ui/Button"
-import { Input } from "../components/ui/Input"
+import { Button } from "../components/ui/button"
+import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/Textarea"
-import { Tooltip } from "../components/ui/Tooltip"
+import { Tooltip } from "../components/ui/tooltip"
 
 export default function LaunchpadPage() {
   const { publicKey } = useWallet()
@@ -52,6 +52,11 @@ export default function LaunchpadPage() {
     setIsLoading(true)
 
     try {
+      // Upload logo to Cloudinary if a file exists
+      if (tokenLogo && !cloudinaryUrl) {
+        await uploadToCloudinary(tokenLogo)
+      }
+      
       // Simulate token creation
       // In a real app, this would create a token on Solana
       // const mintKeypair = Keypair.generate()
@@ -152,6 +157,11 @@ export default function LaunchpadPage() {
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file) {
+      if (!validateFile(file)) {
+        toast.error(uploadError)
+        return
+      }
+      
       setTokenLogo(file)
 
       // Create preview URL for immediate display
@@ -160,9 +170,11 @@ export default function LaunchpadPage() {
         setPreviewImage(e.target.result)
       }
       reader.readAsDataURL(file)
-
-      // Upload to Cloudinary
-      uploadToCloudinary(file)
+      
+      // Clear previous upload status
+      setUploadSuccess(false)
+      setUploadError(null)
+      setCloudinaryUrl(null)
     }
   }
 
@@ -170,6 +182,11 @@ export default function LaunchpadPage() {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (file) {
+      if (!validateFile(file)) {
+        toast.error(uploadError)
+        return
+      }
+      
       setTokenLogo(file)
 
       // Create preview URL for immediate display
@@ -178,9 +195,11 @@ export default function LaunchpadPage() {
         setPreviewImage(e.target.result)
       }
       reader.readAsDataURL(file)
-
-      // Upload to Cloudinary
-      uploadToCloudinary(file)
+      
+      // Clear previous upload status
+      setUploadSuccess(false)
+      setUploadError(null)
+      setCloudinaryUrl(null)
     }
   }
 
