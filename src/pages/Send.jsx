@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { motion, useAnimation } from "framer-motion"
-import { useWallet } from "@solana/wallet-adapter-react"
+import { useWallet,useConnection } from "@solana/wallet-adapter-react"
 import toast from "react-hot-toast"
 import { Send } from "lucide-react"
 import { Button } from "../components/ui/Button"
 import { Input } from "../components/ui/Input"
+import { Transaction,LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js"
 
 export default function SendPage() {
   const { publicKey } = useWallet()
@@ -14,7 +15,8 @@ export default function SendPage() {
   const [amount, setAmount] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const controls = useAnimation()
-
+  const wallet = useWallet();
+  const {connection} = useConnection();
   useEffect(() => {
     controls.start({ opacity: 1, y: 0 })
   }, [controls])
@@ -38,15 +40,17 @@ export default function SendPage() {
     setIsLoading(true)
 
     try {
-      // Simulate token transfer
-      // In a real app, this would be a call to create and send a transaction
-      // const transaction = new Transaction()
-      // transaction.add(...)
-      // const signature = await sendAndConfirmTransaction(connection, transaction, [wallet])
-
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
+      // create and send a transaction
+      const transaction = new Transaction()
+      transaction.add(
+        SystemProgram.transfer({
+          fromPubkey:wallet.publicKey,
+          toPubkey: recipient,
+          lamports: Number(amount)*LAMPORTS_PER_SOL
+        })
+      )
+      const signature = await wallet.sendTransaction(transaction,connection)
+      console.log(signature)
       toast.success(`Successfully sent ${amount} SOL to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`)
       setRecipient("")
       setAmount("")
