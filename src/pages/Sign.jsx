@@ -8,7 +8,8 @@ import { FileSignature, Copy, CheckCircle } from "lucide-react"
 import { Button } from "../components/ui/Button"
 import { Textarea } from "../components/ui/Textarea"
 import { Input } from "../components/ui/Input"
-
+import bs58 from "bs58";
+import { ed25519 } from "@noble/curves/ed25519";
 export default function SignPage() {
   const { publicKey, signMessage } = useWallet()
   const controls = useAnimation()
@@ -43,15 +44,15 @@ export default function SignPage() {
 
     try {
       // In a real app, this would use the actual signMessage function
-      // const messageBytes = new TextEncoder().encode(message)
-      // const signatureBytes = await signMessage(messageBytes)
-      // const signatureBase64 = encode(signatureBytes)
+      const messageBytes = new TextEncoder().encode(message)
+      const signatureBytes = await signMessage(messageBytes)
+      const signatureBase58 = bs58.encode(signatureBytes)
 
       // Simulate signing
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      const mockSignature = "5KTCaYnY9D1zRpNQVRKkvsJzZVVjYxLnLGF2z9uKSPBZpxvH2W7EqMxiKD7CaY9RsF8yAKQ9zJZwc1L7PYLj9Xtz"
+      //await new Promise((resolve) => setTimeout(resolve, 1000))
+      //const mockSignature = "5KTCaYnY9D1zRpNQVRKkvsJzZVVjYxLnLGF2z9uKSPBZpxvH2W7EqMxiKD7CaY9RsF8yAKQ9zJZwc1L7PYLj9Xtz"
 
-      setSignature(mockSignature)
+      setSignature(signatureBase58)
       toast.success("Message signed successfully")
     } catch (error) {
       toast.error("Failed to sign message")
@@ -77,19 +78,19 @@ export default function SignPage() {
     setIsVerifying(true)
 
     try {
-      // In a real app, this would verify the signature
-      // const messageBytes = new TextEncoder().encode(verifyMessage)
-      // const signatureBytes = decode(verifySignature)
-      // const isValid = nacl.sign.detached.verify(
-      //   messageBytes,
-      //   signatureBytes,
-      //   publicKey.toBytes()
-      // )
+      
+      const encodedMessage = new TextEncoder().encode(verifyMessage);
+      const signatureBytes = bs58.decode(verifySignature);
+      const isValid = await ed25519.verify(
+        signatureBytes,
+        encodedMessage,
+        bs58.decode(publicKey.toBase58()) // convert publicKey to Uint8Array
+      );
+      console.log(verifyMessage)
 
-      // Simulate verification
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      toast.success("✅ Message Verified Successfully")
+console.log(isValid)
+      if(isValid){toast.success(" Message Verified Successfully")}
+      else{toast.error(" Message Verified Failed")}
     } catch (error) {
       toast.error("Invalid signature")
       console.error(error)
