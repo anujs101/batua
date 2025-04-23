@@ -1,22 +1,30 @@
 "use client"
-
+import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { MINT_SIZE, TOKEN_2022_PROGRAM_ID, createMintToInstruction, createAssociatedTokenAccountInstruction, getMintLen, createInitializeMetadataPointerInstruction, createInitializeMintInstruction, TYPE_SIZE, LENGTH_SIZE, ExtensionType, mintTo, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddressSync } from "@solana/spl-token"
+import { createInitializeInstruction, pack } from '@solana/spl-token-metadata';
 import { useState, useRef, useEffect } from "react"
 import { motion, useAnimation } from "framer-motion"
-import { useWallet } from "@solana/wallet-adapter-react"
 import toast from "react-hot-toast"
 import { Rocket, Info, ImageIcon, HelpCircle, Check, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
-import { Textarea } from "../components/ui/Textarea"
+import { Textarea } from "../components/ui/textarea"
 import { Tooltip } from "../components/ui/tooltip"
 
+const PINATA_API_KEY = import.meta.env.VITE_PINATA_API_KEY;
+const PINATA_API_SECRET = import.meta.env.VITE_PINATA_API_SECRET;
 export default function LaunchpadPage() {
   const { publicKey } = useWallet()
   const [isLoading, setIsLoading] = useState(false)
   const fileInputRef = useRef(null)
   const [previewImage, setPreviewImage] = useState(null)
   const controls = useAnimation()
-
+  const CLOUD_NAME = 'dfbvndxhf'; // cloud name
+  const UPLOAD_PRESET = 'batua_logo'; 
+  const API_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;  
+  const {connection} = useConnection();
+  const wallet = useWallet();
   useEffect(() => {
     controls.start({ opacity: 1, y: 0 })
   }, [controls])
@@ -37,7 +45,6 @@ export default function LaunchpadPage() {
 
   // Form validation
   const isFormValid = tokenName && tokenSymbol && tokenDecimals && tokenSupply
-
   const handleCreateToken = async () => {
     if (!publicKey) {
       toast.error("Please connect your wallet first")
@@ -57,13 +64,140 @@ export default function LaunchpadPage() {
         await uploadToCloudinary(tokenLogo)
       }
       
-      // Simulate token creation
       // In a real app, this would create a token on Solana
-      // const mintKeypair = Keypair.generate()
-      // const tokenAddress = await createMint(...)
+       const mintKeypair = Keypair.generate()
+      const metadataJSON = {
+        mint : mintKeypair.publicKey,
+        name: tokenName,
+        description: tokenDescription ,
+        symbol: tokenSymbol,
+        image :cloudinaryUrl,
+        additionalMetadata: [],
+    }
+
+    async function uploadToPinata(metadata){
+      const res = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          pinata_api_key: PINATA_API_KEY,
+          pinata_secret_api_key: PINATA_API_SECRET,
+        },
+        body: JSON.stringify(metadata),
+      });
+      if (!res.ok) {
+        console.error('Failed to upload to Pinata:', await res.text());
+        throw new Error('Upload to Pinata failed');
+      }
+    
+      const data = await res.json();
+      return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
+    }
+
+
+
+
+    const uri = await uploadToPinata(metadataJSON);
+    const metadata = {
+      mint: mintKeypair.publicKey,
+      name: tokenName,
+      symbol: tokenSymbol.padEnd(6).slice(0, 6), // symbol must be 6 characters
+      uri,
+      additionalMetadata: [],
+    };
+    const mintLen= getMintLen([ExtensionType.MetadataPointer]);
+    const metadataLen = TYPE_SIZE+LENGTH_SIZE+pack(metadata).length;
+    const lamports = await connection.getMinimumBalanceForRentExemption(mintLen+metadataLen);
+
+    const transaction = new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: wallet.publicKey,
+        newAccountPubkey: mintKeypair.publicKey,
+        lamports,
+        space: mintLen+metadataLen,
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),createInitializeMetadataPointerInstruction(
+        mintKeypair.publicKey,
+        wallet.publicKey,
+        mintKeypair.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ), createInitializeMintInstruction(
+        mintKeypair.publicKey,
+        tokenDecimals,
+        wallet.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ), createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        mint : mintKeypair.publicKey,
+        metadata: mintKeypair.publicKey,
+        name : metadataJSON.name,
+        symbol: metadataJSON.symbol,
+        image:metadataJSON.image,
+        uri : uri,
+        mintAuthority: wallet.publicKey,
+        updateAuthority: wallet.publicKey,
+      }),
+
+    );
+    transaction.feePayer= wallet.publicKey;
+    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    transaction.partialSign(mintKeypair);
+    //testing code 
+    // Before sending the transaction
+// console.log("Blockhash:", transaction.recentBlockhash);
+// console.log("Fee payer:", transaction.feePayer.toBase58());
+// console.log("Signers:", transaction._signers.map(s => s.publicKey.toBase58()));
+// console.log("Number of instructions:", transaction.instructions.length);
+
+// Try simulation first to catch errors
+try {
+  const simulation = await connection.simulateTransaction(transaction);
+  console.log("Simulation result:", simulation);
+  if (simulation.value.err) {
+    console.error("Transaction would fail:", simulation.value.err);
+    throw new Error(`Simulation failed: ${JSON.stringify(simulation.value.err)}`);
+  }
+} catch (simError) {
+  console.error("Simulation error:", simError);
+  toast.error(`Transaction simulation failed: ${simError.message}`);
+  return;
+}
+//testing ends
+    await wallet.sendTransaction(transaction,connection);
+    console.log(`Token mint created at ${mintKeypair.publicKey.toBase58()}`);
+    
+    const associatedToken = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      wallet.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+    );
+    console.log(`associatedToken :${associatedToken.toBase58()}`);
+    const transaction2 = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        wallet.publicKey,
+        associatedToken,
+        wallet.publicKey,
+        mintKeypair.publicKey,
+        TOKEN_2022_PROGRAM_ID,
+      ),
+    );
+    await wallet.sendTransaction(transaction2,connection);
+    const transaction3= new Transaction().add(
+      createMintToInstruction(
+        mintKeypair.publicKey,
+        associatedToken,
+        wallet.publicKey,
+        BigInt(tokenSupply) * BigInt(10 ** Number(tokenDecimals)),
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    )
+    await wallet.sendTransaction(transaction3, connection);
+    
 
       // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      //await new Promise((resolve) => setTimeout(resolve, 2000))
 
       toast.success(`Successfully created ${tokenName} (${tokenSymbol}) token!`, {
         icon: <Check className="text-green-500" />,
@@ -125,20 +259,20 @@ export default function LaunchpadPage() {
       // Create form data for upload
       const formData = new FormData()
       formData.append("file", file)
-      formData.append("upload_preset", "ml_default") // Replace with your unsigned upload preset
+      formData.append("upload_preset", UPLOAD_PRESET) // Replace with your unsigned upload preset
       formData.append("folder", "batua_tokens")
 
       // Upload to Cloudinary
-      const response = await fetch("https://api.cloudinary.com/v1_1/demo/image/upload", {
+      const response = await fetch(API_URL, {
         method: "POST",
         body: formData,
       })
+      const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error("Upload failed")
+      if (data.error) {
+        throw new Error(data.error.message || "Upload failed")
       }
-
-      const data = await response.json()
+      
 
       // Set the secure URL from Cloudinary
       setCloudinaryUrl(data.secure_url)

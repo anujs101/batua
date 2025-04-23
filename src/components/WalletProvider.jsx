@@ -10,10 +10,10 @@ import { clusterApiUrl } from "@solana/web3.js"
 // Import wallet adapter CSS
 import "@solana/wallet-adapter-react-ui/styles.css"
 
-export function WalletProvider({ children }) {
+export function WalletProvider({ children,endpoint }) {
   // Set up network and endpoint
   const network = WalletAdapterNetwork.Devnet
-  const endpoint = useMemo(() => clusterApiUrl(network), [network])
+  //const endpoint = useMemo(() => clusterApiUrl(network), [network])
 
   // Set up supported wallets
   const wallets = useMemo(
@@ -26,7 +26,7 @@ export function WalletProvider({ children }) {
 
   return (
     <ConnectionProvider endpoint={endpoint}>
-      <SolanaWalletProvider wallets={wallets} autoConnect>
+      <SolanaWalletProvider wallets={[]} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </SolanaWalletProvider>
     </ConnectionProvider>

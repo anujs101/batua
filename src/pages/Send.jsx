@@ -5,8 +5,8 @@ import { motion, useAnimation } from "framer-motion"
 import { useWallet,useConnection } from "@solana/wallet-adapter-react"
 import toast from "react-hot-toast"
 import { Send } from "lucide-react"
-import { Button } from "../components/ui/Button"
-import { Input } from "../components/ui/Input"
+import { Button } from "../components/ui/button"
+import { Input } from "../components/ui/input"
 import { Transaction,LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js"
 
 export default function SendPage() {
