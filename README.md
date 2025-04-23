@@ -120,3 +120,19 @@ Made by [Anuj](https://github.com/anujs101)
 ## ✨ Inspiration
 
 Batua means "wallet" in Hindi — built to empower users with real Web3 tools in a beautiful, beginner-friendly package.
+
+## Environment Variables
+
+This project uses environment variables to store sensitive information. Create a `.env` file in the root directory with the following variables:
+
+```
+# Pinata API credentials for IPFS metadata storage
+VITE_PINATA_API_KEY=your_pinata_api_key_here
+VITE_PINATA_API_SECRET=your_pinata_api_secret_here
+
+# Cloudinary configuration for token logo uploads
+VITE_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+VITE_CLOUDINARY_UPLOAD_PRESET=your_cloudinary_upload_preset
+```
+
+Replace the placeholder values with your actual API keys and credentials.

@@ -12,17 +12,19 @@ import { Input } from "../components/ui/input"
 import { Textarea } from "../components/ui/textarea"
 import { Tooltip } from "../components/ui/tooltip"
 
+// Import environment variables
 const PINATA_API_KEY = import.meta.env.VITE_PINATA_API_KEY;
 const PINATA_API_SECRET = import.meta.env.VITE_PINATA_API_SECRET;
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
 export default function LaunchpadPage() {
   const { publicKey } = useWallet()
   const [isLoading, setIsLoading] = useState(false)
   const fileInputRef = useRef(null)
   const [previewImage, setPreviewImage] = useState(null)
   const controls = useAnimation()
-  const CLOUD_NAME = 'dfbvndxhf'; // cloud name
-  const UPLOAD_PRESET = 'batua_logo'; 
-  const API_URL = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;  
+  const API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;  
   const {connection} = useConnection();
   const wallet = useWallet();
   useEffect(() => {
@@ -47,6 +49,13 @@ export default function LaunchpadPage() {
   const isFormValid = tokenName && tokenSymbol && tokenDecimals && tokenSupply
   
   const uploadToPinata = async (metadata) => {
+    // Check if required environment variables are set
+    if (!PINATA_API_KEY || !PINATA_API_SECRET) {
+      console.error("Missing Pinata environment variables");
+      toast.error("Server configuration error: Missing Pinata API credentials");
+      throw new Error("Missing Pinata API credentials");
+    }
+    
     try {
       const res = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
         method: 'POST',
@@ -59,15 +68,17 @@ export default function LaunchpadPage() {
       });
       
       if (!res.ok) {
-        console.error('Failed to upload to Pinata:', await res.text());
-        throw new Error('Upload to Pinata failed');
+        const errorText = await res.text();
+        console.error('Failed to upload to Pinata:', errorText);
+        throw new Error(`Upload to Pinata failed: ${res.status} ${errorText}`);
       }
       
       const data = await res.json();
+      console.log("Successfully uploaded metadata to Pinata");
       return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
     } catch (error) {
       console.error('Pinata upload error:', error);
-      throw new Error('Failed to upload metadata to Pinata');
+      throw new Error(`Failed to upload metadata to Pinata: ${error.message}`);
     }
   };
   
@@ -79,6 +90,18 @@ export default function LaunchpadPage() {
 
     if (!isFormValid) {
       toast.error("Please fill in all required fields")
+      return
+    }
+    
+    // Check if all required environment variables are set
+    if (!PINATA_API_KEY || !PINATA_API_SECRET || !CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      toast.error("Missing API credentials in environment configuration")
+      console.error("Missing environment variables:", {
+        pinataKey: !PINATA_API_KEY ? "missing" : "set",
+        pinataSecret: !PINATA_API_SECRET ? "missing" : "set",
+        cloudinaryName: !CLOUDINARY_CLOUD_NAME ? "missing" : "set",
+        cloudinaryPreset: !CLOUDINARY_UPLOAD_PRESET ? "missing" : "set"
+      });
       return
     }
 
@@ -437,15 +460,27 @@ export default function LaunchpadPage() {
       return
     }
 
+    // Check if required environment variables are set
+    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      console.error("Missing Cloudinary environment variables");
+      toast.error("Server configuration error: Missing Cloudinary credentials");
+      setUploadError("Server configuration error: Missing Cloudinary credentials");
+      setIsUploading(false);
+      return;
+    }
+
     setIsUploading(true)
     setUploadSuccess(false)
     setUploadError(null)
 
     try {
+      // Log Cloudinary configuration for debugging
+      console.log("Attempting Cloudinary upload with configured environment variables");
+      
       // Create form data for upload
       const formData = new FormData()
       formData.append("file", file)
-      formData.append("upload_preset", UPLOAD_PRESET) // Replace with your unsigned upload preset
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET)
       formData.append("folder", "batua_tokens")
 
       // Upload to Cloudinary
@@ -453,13 +488,20 @@ export default function LaunchpadPage() {
         method: "POST",
         body: formData,
       })
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Cloudinary response error:', response.status, errorText);
+        throw new Error(`Upload failed: ${response.status} ${errorText}`);
+      }
+      
       const data = await response.json();
 
       if (data.error) {
         throw new Error(data.error.message || "Upload failed")
       }
       
-
+      console.log('Cloudinary upload successful:', data);
       // Set the secure URL from Cloudinary
       setCloudinaryUrl(data.secure_url)
       setPreviewImage(data.secure_url)
@@ -468,7 +510,7 @@ export default function LaunchpadPage() {
     } catch (error) {
       console.error("Upload error:", error)
       setUploadError("Failed to upload image. Please try again.")
-      toast.error("Failed to upload image. Please try again.")
+      toast.error(`Failed to upload image: ${error.message}`)
     } finally {
       setIsUploading(false)
     }
