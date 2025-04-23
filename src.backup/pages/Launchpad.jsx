@@ -45,32 +45,6 @@ export default function LaunchpadPage() {
 
   // Form validation
   const isFormValid = tokenName && tokenSymbol && tokenDecimals && tokenSupply
-  
-  const uploadToPinata = async (metadata) => {
-    try {
-      const res = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          pinata_api_key: PINATA_API_KEY,
-          pinata_secret_api_key: PINATA_API_SECRET,
-        },
-        body: JSON.stringify(metadata),
-      });
-      
-      if (!res.ok) {
-        console.error('Failed to upload to Pinata:', await res.text());
-        throw new Error('Upload to Pinata failed');
-      }
-      
-      const data = await res.json();
-      return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
-    } catch (error) {
-      console.error('Pinata upload error:', error);
-      throw new Error('Failed to upload metadata to Pinata');
-    }
-  };
-  
   const handleCreateToken = async () => {
     if (!publicKey) {
       toast.error("Please connect your wallet first")
@@ -90,327 +64,167 @@ export default function LaunchpadPage() {
         await uploadToCloudinary(tokenLogo)
       }
       
-      // Generate a new keypair for the mint
-      const mintKeypair = Keypair.generate();
-      console.log(`Mint pubkey: ${mintKeypair.publicKey.toString()}`);
-      
-      // Create metadata JSON
+      // In a real app, this would create a token on Solana
+       const mintKeypair = Keypair.generate()
       const metadataJSON = {
-        mint: mintKeypair.publicKey.toString(),
+        mint : mintKeypair.publicKey,
         name: tokenName,
-        description: tokenDescription,
+        description: tokenDescription ,
         symbol: tokenSymbol,
-        image: cloudinaryUrl || "",
-      };
-      
-      // Upload metadata to Pinata
-      const uri = await uploadToPinata(metadataJSON);
-      console.log(`Metadata URI: ${uri}`);
-      
-      // Calculate mint account size - just for the mint with MetadataPointer extension
-      const mintSpace = getMintLen([ExtensionType.MetadataPointer]);
-      const mintLamports = await connection.getMinimumBalanceForRentExemption(mintSpace);
-      
-      // Step 1: Create a transaction to create the mint account
-      const transaction1 = new Transaction();
-      
-      // Create mint account
-      transaction1.add(
-        SystemProgram.createAccount({
-          fromPubkey: wallet.publicKey,
-          newAccountPubkey: mintKeypair.publicKey,
-          space: mintSpace,
-          lamports: mintLamports,
-          programId: TOKEN_2022_PROGRAM_ID,
-        })
-      );
-      
-      // Initialize the metadata pointer extension
-      transaction1.add(
-        createInitializeMetadataPointerInstruction(
-          mintKeypair.publicKey,
-          wallet.publicKey,
-          mintKeypair.publicKey,
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
-      
-      // Initialize the mint
-      transaction1.add(
-        createInitializeMintInstruction(
-          mintKeypair.publicKey,
-          Number(tokenDecimals),
-          wallet.publicKey,
-          null,
-          TOKEN_2022_PROGRAM_ID
-        )
-      );
-      
-      // Add transaction details
-      transaction1.feePayer = wallet.publicKey;
-      transaction1.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-      transaction1.partialSign(mintKeypair);
-      
-      // Try simulation to catch errors
-      try {
-        console.log("Simulating transaction 1...");
-        const simulation = await connection.simulateTransaction(transaction1);
-        console.log("Simulation result:", simulation.value.logs);
-        if (simulation.value.err) {
-          console.error("Transaction would fail:", simulation.value.err);
-          console.error("Full simulation result:", JSON.stringify(simulation.value, null, 2));
-          throw new Error(`Simulation failed: ${JSON.stringify(simulation.value.err)}`);
-        }
-      } catch (simError) {
-        console.error("Simulation error:", simError);
-        toast.error(`Transaction simulation failed: ${simError.message}`);
-        setIsLoading(false);
-        return;
-      }
-      
-      // Send transaction 1
-      console.log("Sending transaction 1 to create mint account...");
-      const signature1 = await wallet.sendTransaction(transaction1, connection);
-      console.log(`Transaction 1 signature: ${signature1}`);
-      console.log(`Mint account created at ${mintKeypair.publicKey.toString()}`);
-      
-      try {
-        console.log("Waiting for transaction 1 confirmation...");
-        await connection.confirmTransaction(signature1, "confirmed");
-        console.log("Transaction 1 confirmed");
-      } catch (error) {
-        console.error("Error confirming transaction 1:", error);
-        toast.error("Error creating mint account. Please try again.");
-        setIsLoading(false);
-        return;
-      }
-      
-      // Step 2: Create a transaction to initialize the metadata
-      try {
-        console.log("Creating metadata for token...");
-        
-        // Calculate metadata account size and rent
-        const metadataLen = 2 + 
-          32 + // update authority
-          4 + tokenName.length + 
-          4 + tokenSymbol.padEnd(6).slice(0, 6).length + 
-          4 + uri.length + 
-          200; // Extra buffer for safety
-        
-        console.log(`Estimated metadata size: ${metadataLen} bytes`);
-        const metadataLamports = await connection.getMinimumBalanceForRentExemption(metadataLen);
-        console.log(`Required lamports for metadata: ${metadataLamports}`);
-        
-        // Create a transaction to add lamports to mint account for metadata
-        const transaction2 = new Transaction();
-        
-        // Add extra lamports to the mint account (add a 50% buffer for safety)
-        const extraBuffer = 1.5;
-        transaction2.add(
-          SystemProgram.transfer({
-            fromPubkey: wallet.publicKey,
-            toPubkey: mintKeypair.publicKey,
-            lamports: Math.ceil(metadataLamports * extraBuffer),
-          })
-        );
-        
-        // Initialize metadata
-        transaction2.add(
-          createInitializeInstruction({
-            programId: TOKEN_2022_PROGRAM_ID,
-            metadata: mintKeypair.publicKey,
-            updateAuthority: wallet.publicKey,
-            mint: mintKeypair.publicKey,
-            mintAuthority: wallet.publicKey,
-            name: tokenName,
-            symbol: tokenSymbol.padEnd(6).slice(0, 6), // Must be 6 chars
-            uri: uri,
-          })
-        );
-        
-        // Add transaction details
-        transaction2.feePayer = wallet.publicKey;
-        const { blockhash } = await connection.getLatestBlockhash();
-        transaction2.recentBlockhash = blockhash;
-        
-        // Try simulation first
-        console.log("Simulating transaction 2...");
-        const simulation = await connection.simulateTransaction(transaction2);
-        console.log("Simulation result for metadata:", simulation.value.logs);
-        
-        if (simulation.value.err) {
-          console.error("Metadata transaction would fail:", simulation.value.err);
-          console.error("Full simulation result:", JSON.stringify(simulation.value, null, 2));
-          
-          // Try with even more lamports if the simulation failed
-          console.log("Retrying with additional funds for metadata...");
-          
-          // Create a new transaction with more funds
-          const retryTransaction = new Transaction();
-          retryTransaction.add(
-            SystemProgram.transfer({
-              fromPubkey: wallet.publicKey,
-              toPubkey: mintKeypair.publicKey,
-              lamports: metadataLamports * 3, // Try with 3x the estimated amount
-            })
-          );
-          
-          retryTransaction.add(
-            createInitializeInstruction({
-              programId: TOKEN_2022_PROGRAM_ID,
-              metadata: mintKeypair.publicKey,
-              updateAuthority: wallet.publicKey,
-              mint: mintKeypair.publicKey,
-              mintAuthority: wallet.publicKey,
-              name: tokenName,
-              symbol: tokenSymbol.padEnd(6).slice(0, 6),
-              uri: uri,
-            })
-          );
-          
-          retryTransaction.feePayer = wallet.publicKey;
-          retryTransaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-          
-          // Send the retry transaction
-          console.log("Sending retry transaction for metadata...");
-          const retrySignature = await wallet.sendTransaction(retryTransaction, connection);
-          console.log(`Retry transaction signature: ${retrySignature}`);
-          
-          console.log("Waiting for retry transaction confirmation...");
-          await connection.confirmTransaction(retrySignature, "confirmed");
-          console.log("Retry transaction confirmed - Metadata initialized successfully");
-        } else {
-          // Send the transaction if simulation succeeded
-          console.log("Sending transaction 2 to initialize metadata...");
-          const signature2 = await wallet.sendTransaction(transaction2, connection);
-          console.log(`Transaction 2 signature: ${signature2}`);
-          
-          console.log("Waiting for transaction 2 confirmation...");
-          await connection.confirmTransaction(signature2, "confirmed");
-          console.log("Transaction 2 confirmed - Metadata initialized successfully");
-        }
-      } catch (error) {
-        console.error("Error initializing metadata:", error);
-        toast.error("Failed to initialize metadata. Token creation will be aborted.");
-        setIsLoading(false);
-        return; // Stop the token creation process if metadata fails
-      }
-      
-      // Step 3: Create the associated token account
-      try {
-        console.log("Creating associated token account...");
-        const associatedToken = getAssociatedTokenAddressSync(
-          mintKeypair.publicKey,
-          wallet.publicKey,
-          false,
-          TOKEN_2022_PROGRAM_ID
-        );
-        console.log(`Associated token account: ${associatedToken.toString()}`);
-        
-        const transaction3 = new Transaction();
-        transaction3.add(
-          createAssociatedTokenAccountInstruction(
-            wallet.publicKey,
-            associatedToken,
-            wallet.publicKey,
-            mintKeypair.publicKey,
-            TOKEN_2022_PROGRAM_ID
-          )
-        );
-        
-        // Add transaction details
-        transaction3.feePayer = wallet.publicKey;
-        transaction3.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-        
-        // Send transaction 3
-        console.log("Sending transaction 3 to create associated token account...");
-        const signature3 = await wallet.sendTransaction(transaction3, connection);
-        console.log(`Transaction 3 signature: ${signature3}`);
-        
-        try {
-          console.log("Waiting for transaction 3 confirmation...");
-          await connection.confirmTransaction(signature3, "confirmed");
-          console.log("Transaction 3 confirmed");
-        } catch (error) {
-          console.error("Error confirming transaction 3:", error);
-          toast.error("Error creating token account. Token was created but you may need to create a token account manually.");
-          setIsLoading(false);
-          return;
-        }
-        
-        // Step 4: Mint tokens to the associated token account
-        console.log("Creating transaction to mint tokens...");
-        const mintAmount = BigInt(tokenSupply) * BigInt(10 ** Number(tokenDecimals));
-        
-        const transaction4 = new Transaction();
-        transaction4.add(
-          createMintToInstruction(
-            mintKeypair.publicKey,
-            associatedToken,
-            wallet.publicKey,
-            mintAmount,
-            [],
-            TOKEN_2022_PROGRAM_ID
-          )
-        );
-        
-        // Add transaction details
-        transaction4.feePayer = wallet.publicKey;
-        transaction4.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-        
-        // Send transaction 4
-        console.log("Sending transaction 4 to mint tokens...");
-        const signature4 = await wallet.sendTransaction(transaction4, connection);
-        console.log(`Transaction 4 signature: ${signature4}`);
-        
-        try {
-          console.log("Waiting for transaction 4 confirmation...");
-          await connection.confirmTransaction(signature4, "confirmed");
-          console.log("Transaction 4 confirmed");
-          console.log(`Successfully minted ${tokenSupply} tokens`);
-        } catch (error) {
-          console.error("Error confirming transaction 4:", error);
-          toast.error("Error minting tokens. Token and token account were created, but minting failed.");
-          setIsLoading(false);
-          return;
-        }
-        
-        // Display explorer links
-        console.log("Token creation complete! View on explorers:");
-        console.log(`Solana Explorer: https://explorer.solana.com/address/${mintKeypair.publicKey.toString()}?cluster=devnet`);
-        console.log(`Solana FM: https://solana.fm/address/${mintKeypair.publicKey.toString()}?cluster=devnet-solana`);
-        
-        toast.success(`Successfully created ${tokenName} (${tokenSymbol}) token!`, {
-          icon: <Check className="text-green-500" />,
-          style: {
-            borderRadius: "10px",
-            background: "#333",
-            color: "#fff",
-          },
-        });
-        
-        // Reset form
-        setTokenName("");
-        setTokenSymbol("");
-        setTokenDecimals("9");
-        setTokenSupply("1000000");
-        setTokenDescription("");
-        setTokenLogo(null);
-        setPreviewImage(null);
-        setCloudinaryUrl(null);
-        setUploadSuccess(false);
-      } catch (error) {
-        console.error("Error in token creation process:", error);
-        toast.error("Error completing token creation process.");
-      } finally {
-        setIsLoading(false);
-      }
-    } catch (error) {
-      console.error("Token creation failed:", error);
-      toast.error("Token creation failed. Please try again.");
-      setIsLoading(false);
+        image :cloudinaryUrl,
+        additionalMetadata: [],
     }
-  };
+
+    async function uploadToPinata(metadata){
+      const res = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          pinata_api_key: PINATA_API_KEY,
+          pinata_secret_api_key: PINATA_API_SECRET,
+        },
+        body: JSON.stringify(metadata),
+      });
+      if (!res.ok) {
+        console.error('Failed to upload to Pinata:', await res.text());
+        throw new Error('Upload to Pinata failed');
+      }
+    
+      const data = await res.json();
+      return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
+    }
+
+
+
+
+    const uri = await uploadToPinata(metadataJSON);
+    const metadata = {
+      mint: mintKeypair.publicKey,
+      name: tokenName,
+      symbol: tokenSymbol.padEnd(6).slice(0, 6), // symbol must be 6 characters
+      uri,
+      additionalMetadata: [],
+    };
+    const mintLen= getMintLen([ExtensionType.MetadataPointer]);
+    const metadataLen = TYPE_SIZE+LENGTH_SIZE+pack(metadata).length;
+    const lamports = await connection.getMinimumBalanceForRentExemption(mintLen+metadataLen);
+
+    const transaction = new Transaction().add(
+      SystemProgram.createAccount({
+        fromPubkey: wallet.publicKey,
+        newAccountPubkey: mintKeypair.publicKey,
+        lamports,
+        space: mintLen+metadataLen,
+        programId: TOKEN_2022_PROGRAM_ID,
+      }),createInitializeMetadataPointerInstruction(
+        mintKeypair.publicKey,
+        wallet.publicKey,
+        mintKeypair.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ), createInitializeMintInstruction(
+        mintKeypair.publicKey,
+        tokenDecimals,
+        wallet.publicKey,
+        TOKEN_2022_PROGRAM_ID
+      ), createInitializeInstruction({
+        programId: TOKEN_2022_PROGRAM_ID,
+        mint : mintKeypair.publicKey,
+        metadata: mintKeypair.publicKey,
+        name : metadataJSON.name,
+        symbol: metadataJSON.symbol,
+        image:metadataJSON.image,
+        uri : uri,
+        mintAuthority: wallet.publicKey,
+        updateAuthority: wallet.publicKey,
+      }),
+
+    );
+    transaction.feePayer= wallet.publicKey;
+    transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    transaction.partialSign(mintKeypair);
+    //testing code 
+    // Before sending the transaction
+// console.log("Blockhash:", transaction.recentBlockhash);
+// console.log("Fee payer:", transaction.feePayer.toBase58());
+// console.log("Signers:", transaction._signers.map(s => s.publicKey.toBase58()));
+// console.log("Number of instructions:", transaction.instructions.length);
+
+// Try simulation first to catch errors
+try {
+  const simulation = await connection.simulateTransaction(transaction);
+  console.log("Simulation result:", simulation);
+  if (simulation.value.err) {
+    console.error("Transaction would fail:", simulation.value.err);
+    throw new Error(`Simulation failed: ${JSON.stringify(simulation.value.err)}`);
+  }
+} catch (simError) {
+  console.error("Simulation error:", simError);
+  toast.error(`Transaction simulation failed: ${simError.message}`);
+  return;
+}
+//testing ends
+    await wallet.sendTransaction(transaction,connection);
+    console.log(`Token mint created at ${mintKeypair.publicKey.toBase58()}`);
+    
+    const associatedToken = getAssociatedTokenAddressSync(
+      mintKeypair.publicKey,
+      wallet.publicKey,
+      false,
+      TOKEN_2022_PROGRAM_ID,
+    );
+    console.log(`associatedToken :${associatedToken.toBase58()}`);
+    const transaction2 = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        wallet.publicKey,
+        associatedToken,
+        wallet.publicKey,
+        mintKeypair.publicKey,
+        TOKEN_2022_PROGRAM_ID,
+      ),
+    );
+    await wallet.sendTransaction(transaction2,connection);
+    const transaction3= new Transaction().add(
+      createMintToInstruction(
+        mintKeypair.publicKey,
+        associatedToken,
+        wallet.publicKey,
+        BigInt(tokenSupply) * BigInt(10 ** Number(tokenDecimals)),
+        [],
+        TOKEN_2022_PROGRAM_ID
+      )
+    )
+    await wallet.sendTransaction(transaction3, connection);
+    
+
+      // Simulate network delay
+      //await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      toast.success(`Successfully created ${tokenName} (${tokenSymbol}) token!`, {
+        icon: <Check className="text-green-500" />,
+        style: {
+          borderRadius: "10px",
+          background: "#333",
+          color: "#fff",
+        },
+      })
+
+      // Reset form
+      setTokenName("")
+      setTokenSymbol("")
+      setTokenDecimals("9")
+      setTokenSupply("1000000")
+      setTokenDescription("")
+      setTokenLogo(null)
+      setPreviewImage(null)
+      setCloudinaryUrl(null)
+      setUploadSuccess(false)
+    } catch (error) {
+      toast.error("Token creation failed. Please try again.")
+      console.error(error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const validateFile = (file) => {
     // Check file type
