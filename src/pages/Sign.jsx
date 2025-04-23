@@ -4,10 +4,10 @@ import { useState, useEffect } from "react"
 import { motion, useAnimation } from "framer-motion"
 import { useWallet } from "@solana/wallet-adapter-react"
 import toast from "react-hot-toast"
-import { FileSignature, Copy, CheckCircle } from "lucide-react"
-import { Button } from "../components/ui/button"
-import { Textarea } from "../components/ui/textarea"
-import { Input } from "../components/ui/input"
+import { PenTool, CheckCircle, Copy, FileSignature } from "lucide-react"
+import Button from "../components/ui-fixed/button"
+import Input from "../components/ui-fixed/input"
+import Textarea from "../components/ui-fixed/textarea"
 import bs58 from "bs58";
 import { ed25519 } from "@noble/curves/ed25519";
 export default function SignPage() {

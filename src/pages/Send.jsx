@@ -4,10 +4,10 @@ import { useState, useEffect } from "react"
 import { motion, useAnimation } from "framer-motion"
 import { useWallet,useConnection } from "@solana/wallet-adapter-react"
 import toast from "react-hot-toast"
-import { Send } from "lucide-react"
-import { Button } from "../components/ui/button"
-import { Input } from "../components/ui/input"
-import { Transaction,LAMPORTS_PER_SOL, SystemProgram } from "@solana/web3.js"
+import { Send as SendIcon } from "lucide-react"
+import Button from "../components/ui-fixed/button"
+import Input from "../components/ui-fixed/input"
+import { PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } from "@solana/web3.js"
 
 export default function SendPage() {
   const { publicKey } = useWallet()
@@ -71,7 +71,7 @@ export default function SendPage() {
         className="max-w-md mx-auto"
       >
         <div className="text-center mb-8">
-          <Send className="h-12 w-12 text-cyan-500 mx-auto mb-4 futuristic-hover-icon" />
+          <SendIcon className="h-12 w-12 text-cyan-500 mx-auto mb-4 futuristic-hover-icon" />
           <h1 className="text-3xl font-bold mb-2">Send Token</h1>
           <p className="text-gray-400">Transfer SOL or tokens to any Solana wallet</p>
         </div>

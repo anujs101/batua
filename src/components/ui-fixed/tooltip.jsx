@@ -1,9 +1,7 @@
-"use client"
-
-import { useState } from "react"
+import React, { useState } from "react";
 
 export function Tooltip({ children, content }) {
-  const [isVisible, setIsVisible] = useState(false)
+  const [isVisible, setIsVisible] = useState(false);
 
   return (
     <div 
@@ -19,7 +17,7 @@ export function Tooltip({ children, content }) {
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export default Tooltip
+export default Tooltip; 

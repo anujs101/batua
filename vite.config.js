@@ -31,13 +31,30 @@ export default defineConfig({
         }),
       ],
     },
+    include: [
+      // Pre-bundle these dependencies to speed up dev server
+      'react',
+      'react-dom',
+      'framer-motion',
+      'react-hot-toast',
+      '@solana/web3.js',
+      '@solana/wallet-adapter-react',
+      '@solana/spl-token',
+    ],
   },
   build: {
+    outDir: 'dist',
+    sourcemap: true,
     rollupOptions: {
-      plugins: [
-        // Enable rollup polyfills plugin
-        // used during production bundling
+      // Ensure external dependencies are properly handled
+      external: [
+        // Add any external dependencies that might cause problems
       ],
     },
+  },
+  esbuild: {
+    // Allow JSX in .js files
+    jsx: 'automatic',
+    jsxInject: null,
   },
 });

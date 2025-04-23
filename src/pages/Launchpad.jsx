@@ -1,16 +1,16 @@
 "use client"
+import React, { useState, useRef, useEffect } from "react"
 import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { MINT_SIZE, TOKEN_2022_PROGRAM_ID, createMintToInstruction, createAssociatedTokenAccountInstruction, getMintLen, createInitializeMetadataPointerInstruction, createInitializeMintInstruction, TYPE_SIZE, LENGTH_SIZE, ExtensionType, mintTo, getOrCreateAssociatedTokenAccount, getAssociatedTokenAddressSync } from "@solana/spl-token"
 import { createInitializeInstruction, pack } from '@solana/spl-token-metadata';
-import { useState, useRef, useEffect } from "react"
 import { motion, useAnimation } from "framer-motion"
 import toast from "react-hot-toast"
 import { Rocket, Info, ImageIcon, HelpCircle, Check, Loader2, AlertCircle } from "lucide-react"
-import { Button } from "../components/ui/button"
-import { Input } from "../components/ui/input"
-import { Textarea } from "../components/ui/textarea"
-import { Tooltip } from "../components/ui/tooltip"
+import Button from "../components/ui-fixed/button"
+import Input from "../components/ui-fixed/input"
+import Textarea from "../components/ui-fixed/textarea"
+import Tooltip from "../components/ui-fixed/tooltip"
 
 // Import environment variables
 const PINATA_API_KEY = import.meta.env.VITE_PINATA_API_KEY;
@@ -24,7 +24,12 @@ export default function LaunchpadPage() {
   const fileInputRef = useRef(null)
   const [previewImage, setPreviewImage] = useState(null)
   const controls = useAnimation()
-  const API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;  
+  
+  // Ensure Cloudinary URL is constructed correctly
+  const API_URL = CLOUDINARY_CLOUD_NAME 
+    ? `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
+    : '';
+    
   const {connection} = useConnection();
   const wallet = useWallet();
   useEffect(() => {
@@ -46,12 +51,45 @@ export default function LaunchpadPage() {
   const [cloudinaryUrl, setCloudinaryUrl] = useState(null)
 
   // Form validation
-  const isFormValid = tokenName && tokenSymbol && tokenDecimals && tokenSupply
+  const isEnvironmentReady = CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET && PINATA_API_KEY && PINATA_API_SECRET;
+  const isFormValid = tokenName && tokenSymbol && tokenDecimals && tokenSupply && isEnvironmentReady;
+  
+  // Helper function to show environment variable status for debugging
+  const checkEnvironmentVariables = () => {
+    if (!isEnvironmentReady) {
+      console.warn("Missing environment variables:", {
+        cloudinaryName: CLOUDINARY_CLOUD_NAME ? "✓" : "✗",
+        cloudinaryPreset: CLOUDINARY_UPLOAD_PRESET ? "✓" : "✗", 
+        pinataApiKey: PINATA_API_KEY ? "✓" : "✗",
+        pinataApiSecret: PINATA_API_SECRET ? "✓" : "✗"
+      });
+      
+      let missingVars = [];
+      if (!CLOUDINARY_CLOUD_NAME) missingVars.push("VITE_CLOUDINARY_CLOUD_NAME");
+      if (!CLOUDINARY_UPLOAD_PRESET) missingVars.push("VITE_CLOUDINARY_UPLOAD_PRESET");
+      if (!PINATA_API_KEY) missingVars.push("VITE_PINATA_API_KEY");
+      if (!PINATA_API_SECRET) missingVars.push("VITE_PINATA_API_SECRET");
+      
+      toast.error(`Missing environment variables: ${missingVars.join(", ")}`);
+      return false;
+    }
+    return true;
+  }
   
   const uploadToPinata = async (metadata) => {
     // Check if required environment variables are set
     if (!PINATA_API_KEY || !PINATA_API_SECRET) {
       console.error("Missing Pinata environment variables");
+      
+      // Development fallback - create a mock IPFS hash
+      if (import.meta.env.MODE === 'development') {
+        console.warn("Running in development mode - using mock IPFS URL instead of Pinata");
+        const mockIpfsHash = "QmPLuYZS5mdX3qBsjE4uxWuQZ4EjmENY11JFcFMZ5gbRiG";
+        const mockUrl = `https://gateway.pinata.cloud/ipfs/${mockIpfsHash}`;
+        toast.warning("Using mock IPFS URL (Pinata credentials not set)");
+        return mockUrl;
+      }
+      
       toast.error("Server configuration error: Missing Pinata API credentials");
       throw new Error("Missing Pinata API credentials");
     }
@@ -88,21 +126,14 @@ export default function LaunchpadPage() {
       return
     }
 
-    if (!isFormValid) {
+    if (!tokenName || !tokenSymbol || !tokenDecimals || !tokenSupply) {
       toast.error("Please fill in all required fields")
       return
     }
     
     // Check if all required environment variables are set
-    if (!PINATA_API_KEY || !PINATA_API_SECRET || !CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-      toast.error("Missing API credentials in environment configuration")
-      console.error("Missing environment variables:", {
-        pinataKey: !PINATA_API_KEY ? "missing" : "set",
-        pinataSecret: !PINATA_API_SECRET ? "missing" : "set",
-        cloudinaryName: !CLOUDINARY_CLOUD_NAME ? "missing" : "set",
-        cloudinaryPreset: !CLOUDINARY_UPLOAD_PRESET ? "missing" : "set"
-      });
-      return
+    if (!checkEnvironmentVariables()) {
+      return;
     }
 
     setIsLoading(true)
@@ -463,6 +494,18 @@ export default function LaunchpadPage() {
     // Check if required environment variables are set
     if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
       console.error("Missing Cloudinary environment variables");
+      
+      // Development fallback - just create a local object URL for testing
+      if (import.meta.env.MODE === 'development') {
+        console.warn("Running in development mode - using local file URL instead of Cloudinary");
+        const localUrl = URL.createObjectURL(file);
+        setCloudinaryUrl(localUrl);
+        setPreviewImage(localUrl);
+        setUploadSuccess(true);
+        toast.warning("Using local file preview (Cloudinary credentials not set)");
+        return localUrl;
+      }
+      
       toast.error("Server configuration error: Missing Cloudinary credentials");
       setUploadError("Server configuration error: Missing Cloudinary credentials");
       setIsUploading(false);
@@ -507,10 +550,12 @@ export default function LaunchpadPage() {
       setPreviewImage(data.secure_url)
       setUploadSuccess(true)
       toast.success("Logo uploaded successfully!")
+      return data.secure_url;
     } catch (error) {
       console.error("Upload error:", error)
       setUploadError("Failed to upload image. Please try again.")
       toast.error(`Failed to upload image: ${error.message}`)
+      return null;
     } finally {
       setIsUploading(false)
     }
