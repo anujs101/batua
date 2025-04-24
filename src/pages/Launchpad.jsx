@@ -140,8 +140,12 @@ export default function LaunchpadPage() {
 
     try {
       // Upload logo to Cloudinary if a file exists
+      let imageUrl = cloudinaryUrl;
       if (tokenLogo && !cloudinaryUrl) {
-        await uploadToCloudinary(tokenLogo)
+        imageUrl = await uploadToCloudinary(tokenLogo);
+        console.log("Image uploaded to Cloudinary:", imageUrl);
+      } else {
+        console.log("Using existing Cloudinary URL:", imageUrl);
       }
       
       // Generate a new keypair for the mint
@@ -154,8 +158,10 @@ export default function LaunchpadPage() {
         name: tokenName,
         description: tokenDescription,
         symbol: tokenSymbol,
-        image: cloudinaryUrl || "",
+        image: imageUrl || "",
       };
+      
+      console.log("Creating metadata with image URL:", imageUrl);
       
       // Upload metadata to Pinata
       const uri = await uploadToPinata(metadataJSON);
@@ -488,7 +494,7 @@ export default function LaunchpadPage() {
   const uploadToCloudinary = async (file) => {
     if (!validateFile(file)) {
       toast.error(uploadError)
-      return
+      return null
     }
 
     // Check if required environment variables are set
@@ -509,7 +515,7 @@ export default function LaunchpadPage() {
       toast.error("Server configuration error: Missing Cloudinary credentials");
       setUploadError("Server configuration error: Missing Cloudinary credentials");
       setIsUploading(false);
-      return;
+      return null;
     }
 
     setIsUploading(true)
@@ -519,6 +525,7 @@ export default function LaunchpadPage() {
     try {
       // Log Cloudinary configuration for debugging
       console.log("Attempting Cloudinary upload with configured environment variables");
+      console.log("API URL:", API_URL);
       
       // Create form data for upload
       const formData = new FormData()
@@ -545,12 +552,15 @@ export default function LaunchpadPage() {
       }
       
       console.log('Cloudinary upload successful:', data);
+      const imageUrl = data.secure_url;
+      console.log('Cloudinary image URL:', imageUrl);
+      
       // Set the secure URL from Cloudinary
-      setCloudinaryUrl(data.secure_url)
-      setPreviewImage(data.secure_url)
+      setCloudinaryUrl(imageUrl)
+      setPreviewImage(imageUrl)
       setUploadSuccess(true)
       toast.success("Logo uploaded successfully!")
-      return data.secure_url;
+      return imageUrl;
     } catch (error) {
       console.error("Upload error:", error)
       setUploadError("Failed to upload image. Please try again.")
@@ -574,7 +584,9 @@ export default function LaunchpadPage() {
       // Create preview URL for immediate display
       const reader = new FileReader()
       reader.onload = (e) => {
-        setPreviewImage(e.target.result)
+        const previewUrl = e.target.result
+        console.log("File preview created:", previewUrl ? "Preview available" : "No preview")
+        setPreviewImage(previewUrl)
       }
       reader.readAsDataURL(file)
       
@@ -582,6 +594,8 @@ export default function LaunchpadPage() {
       setUploadSuccess(false)
       setUploadError(null)
       setCloudinaryUrl(null)
+      
+      console.log("File selected for upload:", file.name, file.type, file.size)
     }
   }
 
@@ -599,7 +613,9 @@ export default function LaunchpadPage() {
       // Create preview URL for immediate display
       const reader = new FileReader()
       reader.onload = (e) => {
-        setPreviewImage(e.target.result)
+        const previewUrl = e.target.result
+        console.log("Dropped file preview created:", previewUrl ? "Preview available" : "No preview")
+        setPreviewImage(previewUrl)
       }
       reader.readAsDataURL(file)
       
@@ -607,6 +623,8 @@ export default function LaunchpadPage() {
       setUploadSuccess(false)
       setUploadError(null)
       setCloudinaryUrl(null)
+      
+      console.log("File dropped for upload:", file.name, file.type, file.size)
     }
   }
 
