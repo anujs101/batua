@@ -62,7 +62,7 @@ Built for developers, crypto enthusiasts, and learners who want to explore core 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/batua.git
+git clone https://github.com/anujs101/batua.git
 cd batua
 ```
 
